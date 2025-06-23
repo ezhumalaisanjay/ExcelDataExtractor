@@ -16,7 +16,7 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  
+
   const { uploadFile, isUploading, progress } = useFileUpload({
     onSuccess: (data) => {
       onFileProcessed(data);
@@ -42,15 +42,15 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ];
-    
+
     if (!allowedTypes.includes(file.type) && !file.name.match(/\.(xls|xlsx)$/i)) {
       return 'Please select a valid Excel file (.xls or .xlsx)';
     }
-    
+
     if (file.size > maxSize) {
       return 'File size must be less than 10MB';
     }
-    
+
     return null;
   }, []);
 
@@ -72,7 +72,7 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       handleFileSelect(files[0]);
@@ -168,3 +168,34 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
     </Card>
   );
 }
+
+const handleFileUpload = async (file: File) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type header - let the browser set it with boundary
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Upload failed with response:', errorText);
+        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      onFileProcessed(result);
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert(error instanceof Error ? error.message : 'Upload failed');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
