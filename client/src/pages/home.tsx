@@ -4,6 +4,7 @@ import { DataPreview } from "@/components/data-preview";
 import { ExportControls } from "@/components/export-controls";
 import { AIInsights } from "@/components/ai-insights";
 import { SampleDataGenerator } from "@/components/sample-data-generator";
+import { DataQualityChecker } from "@/components/data-quality-checker";
 import { FileSpreadsheet, Settings, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -100,8 +101,8 @@ export default function Home() {
             />
           </div>
 
-          {/* Right Column: Data Preview */}
-          <div className="lg:col-span-3">
+          {/* Right Column: Data Preview and Quality Check */}
+          <div className="lg:col-span-3 space-y-6">
             <DataPreview
               data={currentData}
               sheets={processedFile?.sheets || []}
@@ -110,6 +111,13 @@ export default function Home() {
               totalRows={currentData ? currentData.length - 1 : 0}
               totalColumns={currentData && currentData.length > 0 ? currentData[0].length : 0}
             />
+            
+            {processedFile && currentData && (
+              <DataQualityChecker
+                data={currentData}
+                currentSheet={currentSheet}
+              />
+            )}
           </div>
         </div>
       </main>
