@@ -1,6 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+// Set the API key directly
+const GEMINI_API_KEY = "AIzaSyBrcXjJl74fJwtDLgVtZJ3UrEEjUCgaK1U";
+
+const ai = new GoogleGenAI({ 
+  apiKey: GEMINI_API_KEY
+});
 
 export async function analyzeExcelData(data: any[][], filename: string): Promise<string> {
   try {
