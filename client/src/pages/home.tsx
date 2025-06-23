@@ -2,6 +2,8 @@ import { useState } from "react";
 import { FileUpload } from "@/components/file-upload";
 import { DataPreview } from "@/components/data-preview";
 import { ExportControls } from "@/components/export-controls";
+import { AIInsights } from "@/components/ai-insights";
+import { SampleDataGenerator } from "@/components/sample-data-generator";
 import { FileSpreadsheet, Settings, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -11,6 +13,11 @@ interface ProcessedFile {
   size: number;
   sheets: string[];
   data: Record<string, any[][]>;
+  aiAnalysis?: {
+    summary: string;
+    patterns: string[];
+    suggestions: string[];
+  } | null;
 }
 
 export default function Home() {
@@ -68,14 +75,17 @@ export default function Home() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Excel File Processing</h2>
           <p className="text-gray-600">
-            Upload and extract data from your Excel files (.xls, .xlsx) with real-time preview and export capabilities.
+            Upload and extract data from your Excel files (.xls, .xlsx) with AI-powered insights, real-time preview and export capabilities.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Left Column: Upload and Controls */}
           <div className="lg:col-span-1 space-y-6">
             <FileUpload onFileProcessed={handleFileProcessed} />
+            {!processedFile && (
+              <SampleDataGenerator onSampleGenerated={handleFileProcessed} />
+            )}
             <ExportControls 
               data={currentData}
               filename={processedFile?.filename}
@@ -83,10 +93,15 @@ export default function Home() {
               onClear={handleClear}
               disabled={!processedFile}
             />
+            <AIInsights 
+              fileId={processedFile?.id || null}
+              currentSheet={currentSheet}
+              initialInsights={processedFile?.aiAnalysis || null}
+            />
           </div>
 
           {/* Right Column: Data Preview */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-3">
             <DataPreview
               data={currentData}
               sheets={processedFile?.sheets || []}
