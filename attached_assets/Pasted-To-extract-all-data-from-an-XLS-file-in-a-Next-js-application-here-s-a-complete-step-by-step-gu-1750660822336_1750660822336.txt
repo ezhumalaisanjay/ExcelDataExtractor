@@ -1,0 +1,102 @@
+To **extract all data from an XLS file in a Next.js application**, here's a complete step-by-step guide:
+
+---
+
+## ✅ 1. **Install Required Packages**
+
+You’ll need [`xlsx`](https://www.npmjs.com/package/xlsx) for parsing `.xls`/`.xlsx` files.
+
+```bash
+npm install xlsx
+```
+
+---
+
+## ✅ 2. **Create XLS Upload Component**
+
+Create a React component to upload and parse the XLS file:
+
+```jsx
+// components/XLSUploader.js
+'use client';
+
+import * as XLSX from 'xlsx';
+import { useState } from 'react';
+
+export default function XLSUploader() {
+  const [data, setData] = useState([]);
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+
+      // Read the first sheet
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+
+      // Convert sheet to JSON
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      setData(jsonData);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  return (
+    <div className="p-4">
+      <input type="file" accept=".xls,.xlsx" onChange={handleFileUpload} />
+      <pre className="mt-4 bg-gray-100 p-2 overflow-auto max-h-[500px]">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  );
+}
+```
+
+---
+
+## ✅ 3. **Use Component in a Next.js Page**
+
+Create a page that uses the uploader:
+
+```jsx
+// app/xls/page.js (or pages/xls.js if using pages directory)
+import XLSUploader from '@/components/XLSUploader';
+
+export default function XLSPage() {
+  return (
+    <main className="max-w-2xl mx-auto mt-10">
+      <h1 className="text-xl font-bold mb-4">XLS Data Extractor</h1>
+      <XLSUploader />
+    </main>
+  );
+}
+```
+
+---
+
+## ✅ 4. **Run the App**
+
+Start your dev server:
+
+```bash
+npm run dev
+```
+
+Visit `http://localhost:3000/xls` and upload your `.xls` or `.xlsx` file.
+
+---
+
+## 🧠 Notes:
+
+* `XLSX.utils.sheet_to_json(worksheet)` extracts all rows with headers automatically.
+* You can loop through the JSON to display in tables, export to API, etc.
+* For larger files, consider chunking or worker threads to improve performance.
+
+---
+
+Would you like help turning this into a table or exporting the parsed data to an API/backend?

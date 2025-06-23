@@ -1,0 +1,1729 @@
+​​EP Mapping - AI Agent Framework 
+
+​Contents 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​ 
+
+​​ 
+
+1. Mapping Upload 
+
+“In the Mapping tab, implement a `<MappingUpload>` component with the following ShadCN UI and behavior: 
+
+1.1 File Selection UI   
+
+   - Use a `<Card>` titled “Upload Mapping Template”   
+
+   - Inside, render a `<Form>` containing:   
+
+     • A drag-and-drop zone using `<Input type="file" accept=".xlsx,.xls" multiple={false}>` with custom styling to highlight on hover   
+
+     • A helper text: “Drag & drop your Excel file or click to browse” in `<FormDescription>`   
+
+     • Disable the upload button until a valid file is selected   
+
+   - On file select, validate extension and file size (max 10 MB). If invalid, show `<Alert variant="destructive">Only .xlsx/.xls files under 10 MB are accepted.</Alert>` 
+
+ 
+
+1.2 Preview & Validation   
+
+   - After successful upload to the browser, POST the file as `multipart/form-data` to `POST /api/uploads/mapping`   
+
+   - Receive `{ uploadId }` and immediately call `GET /api/uploads/mapping/{uploadId}/preview`   
+
+   - Show a `<Table>` previewing the first 5 rows:   
+
+     • Table headers come from `preview.headers`   
+
+     • Rows from `preview.rows`   
+
+   - If `preview.missingColumns.length > 0`, render `<Alert variant="warning">Missing columns: {missingColumns.join(", ")}</Alert>`   
+
+     • Disable the “Ingest Data” button until all required columns are present   
+
+   - Otherwise, enable an `<Button variant="primary">Ingest Data</Button>` 
+
+ 
+
+1.3 Ingestion Action   
+
+   - On clicking “Ingest Data”: 
+
+     • Disable the form and show `<Spinner className="mx-auto" />` inside the button   
+
+     • Call `POST /api/uploads/mapping/{uploadId}/ingest`   
+
+     • While waiting, show a full-width `<Progress>` bar (indeterminate) below the button   
+
+   - On success (`{ importedCount, errorFileUrl? }`): 
+
+     • Show `<Toast>`: “Imported {importedCount} rows. AI agents are now processing.”   
+
+     • If `errorFileUrl` is provided, also show `<Alert variant="destructive">Some rows failed. <Link href={errorFileUrl}>Download error report</Link></Alert>`   
+
+     • Emit a WebSocket event or call a refresh hook to reload Mapping grid, Alerts, and Prospects tabs   
+
+     • Reset file input and preview table 
+
+ 
+
+1.4 Error Handling   
+
+   - On network or server error during upload or ingest, catch and display `<Alert variant="destructive">Upload failed: {error.message}</Alert>`   
+
+   - Re-enable the form so users can retry 
+
+ 
+
+1.5 Accessibility & UX   
+
+   - Ensure all buttons and inputs have `aria-label` or `aria-labelledby`   
+
+   - Keyboard‐navigable drag-and-drop zone   
+
+   - Responsive layout: on small screens, stack the preview table below the upload form   
+
+ 
+
+Tech notes for developers:   
+
+- Use the ShadCN `<Form>`, `<FormField>`, `<FormItem>`, `<FormLabel>`, `<FormControl>`, `<FormDescription>` pattern   
+
+- Manage file state with React Hook Form or a dedicated `useState` hook   
+
+- Use `fetch` or a custom `useApi` hook to handle REST calls, including retry logic   
+
+- Leverage context or a global event bus (`useWebSocket`) to notify other tabs on successful ingestion   
+
+- Validate column names against a constant array: `["Name","IMO","Vessel Type","ETA","Port","Country","Commercial Ops","Tech Manager","Third Party Ops","Name2","IMO2","Customer2"]`”   
+
+2. Data Ingestion & Normalization 
+
+Create a robust Data Ingestion & Normalization service under `src/services/ingestionService.ts` and wire it to an Express route or scheduled job: 
+
+ 
+
+2.1 File Retrieval & Job Tracking   
+
+   - Define a DynamoDB table `IngestionJobs` with fields `{ jobId, uploadId, status, createdAt, startedAt, finishedAt, importedCount, errorFileUrl }`.   
+
+   - In your Express router, add `POST /api/ingest/start` that accepts `{ uploadId }`, creates a new `IngestionJobs` record (`status='pending'`), and enqueues `processIngestion(jobId)` (via a background worker or setImmediate). 
+
+ 
+
+2.2 Excel Parsing & Validation   
+
+   - In `processIngestion(jobId)`: 
+
+     • Retrieve the uploaded file (from local `/tmp` or S3) by `uploadId`.   
+
+     • Use the `xlsx` library to read the first sheet.   
+
+     • Verify required headers (`IMO`, `ETA`, `Port`, etc.). If any are missing, update `IngestionJobs` with `status='failed'`, list missing columns, and stop.   
+
+     • Extract all rows into an array of objects. 
+
+ 
+
+2.3 Row‐Level Normalization   
+
+   - For each row: 
+
+     • Trim and uppercase the `IMO` and `Port` fields.   
+
+     • Parse `ETA` using `dayjs` with `DD.MM.YY HH:mm` fallback to `DD.MM.YY`. Convert to ISO 8601.   
+
+     • Map human‐readable `Port` names to internal `portId` using your `Ports` lookup table. If unmapped, mark this row as an anomaly later.   
+
+     • Standardize vessel names (remove extra whitespace, special characters).   
+
+     • Default missing optional fields (e.g., `vesselType`, `notes`) to `null`. 
+
+ 
+
+2.4 Batch Write to DynamoDB   
+
+   - Use `AWS.DynamoDB.DocumentClient.batchWrite()` in chunks of 25 items to write normalized records into `PortCallsTable`.   
+
+   - If any items fail, collect those row objects with error messages into an array. 
+
+ 
+
+2.5 Error Reporting & Completion   
+
+   - After processing all rows: 
+
+     • If there are failed rows, generate a CSV via `papaparse` or `fast-csv`, upload it to S3 under `error-reports/{jobId}.csv`, and set `errorFileUrl` in `IngestionJobs`.   
+
+     • Update the `IngestionJobs` record: `status='completed'`, `finishedAt=now`, `importedCount = totalSuccessCount`.   
+
+     • Publish a websocket or Server‐Sent Event `data.ingested` with `{ jobId, importedCount, errorFileUrl }` so the front end can refresh. 
+
+ 
+
+2.6 Expose Status Endpoint   
+
+   - Add `GET /api/ingest/status/{jobId}` to return the current `IngestionJobs` record, so the UI `<MappingUpload>` component can poll and display real‐time progress, success count, and download link for errors. 
+
+ 
+
+Use ShadCN’s `<Toast>` and `<Progress>` in the MappingUpload component to reflect job status and let users download the error CSV if needed.” 
+
+3. Vessel Mapping Grid & Mapbox View 
+
+ 3.1 Fetch & State Management 
+
+ 
+“Create a custom hook `usePortCalls(region: string)`: 
+
+- Uses React Query’s `useQuery` to GET `/api/portcalls?region=${region}` 
+
+- Returns `{ data: PortCall[], isLoading, isError, refetch }` 
+
+- PortCall type includes: imo, vesselName, vesselType, eta, portId, country, clientId, secondaryClient, coordinates” 
+
+ 
+
+ 3.2 Mapbox Setup 
+
+ 
+“In `Mapping` screen, install `react-map-gl`.   
+
+Add `<Map initialViewState={{ longitude, latitude, zoom }} style={{ width: '100%', height: 400 }}>`.   
+
+- Use environment var `REACT_APP_MAPBOX_TOKEN`.   
+
+- Center on first vessel or a default region bounding box.   
+
+- Add `<NavigationControl>` and `<FullscreenControl>` for usability.” 
+
+ 
+3.3 Marker Rendering & Clustering 
+
+ 
+
+“Within `<Map>`, render: 
+
+- If `data.length > 50`, wrap coordinates in `supercluster` to cluster markers 
+
+- For each cluster: `<Marker>` showing cluster count badge (ShadCN `<Badge>`) 
+
+- For each individual vessel: `<Marker>` with a small ship icon (SVG) 
+
+- On hover, change cursor to pointer and scale marker up slightly via CSS” 
+
+ 
+3.4 Popups & Vessel Details 
+
+ 
+
+“On `<Marker>` click, open a ShadCN `<Dialog>` or `<Popover>` showing: 
+
+- Vessel Name (IMO) and Vessel Type (`<Text>` + `<Badge>`) 
+
+- ETA (`<Text>` formatted from ISO string) 
+
+- Port Name & Country 
+
+- Client (`<Select>` with AI-suggestion tag) 
+
+- Secondary Client (if exists) 
+
+- Notes (`<Textarea>` prefilled) 
+
+- Buttons: `<Button variant="primary">Confirm Mapping</Button>` and `<Button variant="outline">Edit</Button>` 
+
+Bind Confirm to `POST /api/agents/entity-matcher/confirm` with required payload.” 
+
+ 
+3.5 Data Grid Integration 
+
+ 
+
+“Below the map, create a ShadCN `<DataTable>`: 
+
+- Columns:  
+
+   • Vessel (renders IMO + tooltip with full name)  
+
+   • Type, ETA (sortable), Port, Country 
+
+   • Client (editable via dropdown inline) 
+
+   • Secondary Client 
+
+   • Actions (View on map `<Button size="icon">🎯</Button>`) 
+
+- Support sorting by ETA and filtering by Vessel Type via `<Select>` above table 
+
+- Tie table row click to center map: `mapRef.current.flyTo({ center: [lng, lat], zoom: 8 })`” 
+
+ 
+3.6 Responsive Layout & Tabs 
+
+ 
+
+“Wrap Map and DataTable in a responsive `<Grid>`: 
+
+- On large screens: two columns (map 60%, table 40%) 
+
+- On small screens: stacked 
+
+- Add a `<Tabs>` above to switch between “Map View” and “Grid View” modes, each rendering only the map or table accordingly. 
+
+ 
+3.7 Loading & Error States 
+
+ 
+
+“Use ShadCN `<Skeleton>` for map placeholder and `<TableSkeleton>` for grid while `isLoading` is true.   
+
+If `isError`, show `<Alert variant="destructive">Failed to load vessel data <Button variant="link" onClick={refetch}>Retry</Button></Alert>`.” 
+
+4. Entity Matching Suggestions 
+
+ 
+
+In the Mapping tab of our ShadCN React app, implement the Entity Matching Suggestions workflow as follows: 
+
+ 
+
+4.1 Data Table Enhancement   
+
+   - In the existing `<DataTable>` for vessel rows, add a new column “AI Match”.   
+
+     - If `row.clientId` is `null` or `row.matchStatus === "pending"`, display a ShadCN `<Badge variant="outline" className="animate-pulse">AI Pending</Badge>`.   
+
+     - If `row.matchStatus === "suggested"`, show `<Badge variant="warning">Review Suggestion</Badge>`.   
+
+     - If `row.matchStatus === "confirmed"`, show `<Badge variant="success">Confirmed</Badge>`.   
+
+ 
+
+4.2 On-Demand Suggestion Trigger   
+
+   - For each row with `matchStatus === "pending"`, append an inline “Suggest” `<Button size="sm" variant="ghost">` (label “🤖 Suggest”) that when clicked: 
+
+     - Calls `POST /api/agents/entity-matcher` with payload `{ imo: row.imo }`.   
+
+     - Disables the button, shows a `<Spinner size="sm" />` in its place until response. 
+
+ 
+
+4.3 Suggestion Modal/Dialog   
+
+   - Upon receiving API response (`{ clientId, commercialOperator, technicalManager, thirdPartyOperator, confidence }`), open a ShadCN `<Dialog>` titled “AI Entity Match”.   
+
+     - Inside, use a ShadCN `<Form>` with controlled fields: 
+
+       ```jsx 
+
+       <Select label="Client" defaultValue={clientId}> 
+
+         {/ map over /api/clients to produce options /} 
+
+       </Select> 
+
+       <Input label="Commercial Operator" defaultValue={commercialOperator} /> 
+
+       <Input label="Technical Manager" defaultValue={technicalManager} /> 
+
+       <Input label="Third-Party Operator" defaultValue={thirdPartyOperator} /> 
+
+       <p className="text-sm text-gray-500"> 
+
+         Confidence: {(confidence  100).toFixed(1)}% 
+
+       </p> 
+
+       ``` 
+
+     - At the bottom, two buttons: 
+
+       - `<Button variant="primary">Confirm</Button>` → calls `POST /api/agents/entity-matcher/confirm` with finalized values and sets `matchStatus = "confirmed"` on success.   
+
+       - `<Button variant="outline">Override</Button>` → switches fields into editable mode (if not already) and on save does the same `confirm` endpoint. 
+
+ 
+
+4.4 Batch Suggestion on Page Load   
+
+   - When the Mapping tab mounts, automatically call `POST /api/agents/entity-matcher/batch` with all `pending` IMOs currently in view.   
+
+   - Throttle to 5 concurrent API calls.   
+
+   - As each suggestion returns, mark row `matchStatus = "suggested"` and cache the suggestion in state for immediate modal open if user clicks the badge. 
+
+ 
+
+4.5 State & UX Feedback   
+
+   - Maintain a React context or Zustand store `entityMatches` keyed by `imo`, storing `{ suggestion, status, error }`.   
+
+   - Show transient feedback via ShadCN `<Toast>` for: 
+
+     - Suggestion fetched: “AI suggestion ready for IMO 9456123.”   
+
+     - Suggestion confirm success: “IMO 9456123 matched to Client X.”   
+
+     - Errors: “AI match failed for IMO 9456123: {error.message}.” 
+
+ 
+
+4.6 Accessibility & Responsiveness   
+
+   - Ensure the modal/dialog is accessible (focus trap, ARIA labels).   
+
+   - On mobile, the dialog should slide up from bottom using ShadCN `<Sheet>` instead of `<Dialog>`.   
+
+ 
+
+4.7 Error Handling & Fallback   
+
+   - If the API returns `confidence < 0.75`, pre-open the modal and highlight fields in error state:   
+
+     ```jsx 
+
+     <Alert variant="warning"> 
+
+       Low confidence ({(confidence100).toFixed(0)}%). Please verify all fields. 
+
+     </Alert> 
+
+     ``` 
+
+   - If the API call fails, show a non-blocking `<Alert>` in the row: “AI match failed. Try again.” 
+
+ 
+
+4.8 Integration with Downstream Agents   
+
+   - After confirm, trigger a refresh of the Prospects and Alerts tabs by emitting an event on a shared EventEmitter or global store so Sales & Ops UIs reflect the new `clientId` immediately. 
+
+Use this prompt to scaffold the Entity Matching Suggestions functionality end-to-end in your ShadCN app. 
+
+5. Alerts Dashboard 
+
+“In the `Alerts` tab, implement a comprehensive Alerts Dashboard using ShadCN UI components: 
+
+ 
+
+5.1 Layout & Data Fetching   
+
+   - Create a page component `AlertsPage.tsx` under `src/pages/Alerts`.   
+
+   - On mount, call `GET /api/agents/anomalies?status=open&region={selectedRegion}` using a custom `useApi` hook.   
+
+   - Manage loading (`<Spinner>`) and error (`<Alert variant="destructive">` with retry button). 
+
+ 
+
+5.2 Filter Bar   
+
+   - At the top, render a `<Form>` with:   
+
+     • `<Select>` for Region (values: “All”, “SE Americas”, etc.)   
+
+     • `<Select>` for Anomaly Type (multi-select: MissingETA, ETADeviation, UnknownPort, MissingOperator)   
+
+     • `<DatePicker>` range selector for Detected Date   
+
+     • `<Button variant="outline">Apply Filters</Button>` to re-fetch with query params. 
+
+ 
+
+5.3 Alerts Table   
+
+   - Use ShadCN `<Table>` family:   
+
+     • `<TableHeader>` with `<TableHead>` cells: “Type”, “IMO”, “Port”, “Details”, “Detected At”, “Status”, “Actions”.   
+
+     • `<TableBody>` mapping each anomaly to a `<TableRow>`.   
+
+     • In “Type” cell, wrap the string in `<Badge variant="destructive">` for critical, `<Badge variant="warning">` for medium, `<Badge variant="secondary">` for informational.   
+
+     • Format “Detected At” with a `<Tooltip>` showing full timestamp, and display relative time (“2h ago”). 
+
+ 
+
+5.4 Row Actions   
+
+   - In the “Actions” cell, render three `<Button size="icon">`s with icons:   
+
+     • Resolve (checkmark icon) → onClick calls `PUT /api/agents/anomalies/{id}/resolve`, then remove row from table and show `<Toast>` “Alert resolved.”   
+
+     • Snooze (clock icon) → onClick opens a `<Popover>` containing `<Select>` for durations (1h, 4h, 24h) and “Snooze” `<Button>`. On confirm, call `PUT /api/agents/anomalies/{id}/snooze?duration=4h`.   
+
+     • Escalate (arrow-up icon) → onClick opens `<Dialog>` with `<Select>` for team (“Sales”, “Ops”, “Compliance”) and “Escalate” `<Button>`, hitting `PUT /api/agents/anomalies/{id}/escalate` with payload. 
+
+ 
+
+5.5 Pagination & Auto-Refresh   
+
+   - Add `<Pagination>` controls below the table, driven by `page` and `pageSize` query params in the API call.   
+
+   - Auto-refresh the table every 5 minutes via a `setInterval` hook, maintaining current filters and page. 
+
+ 
+
+5.6 Empty & Error States   
+
+   - If no anomalies, show `<EmptyState>` component with message “No active alerts. All clear!” and a “Refresh” `<Button>`.   
+
+   - On fetch error, show `<Alert variant="destructive">Failed to load alerts.</Alert>` with a “Retry” `<Button>`. 
+
+ 
+
+5.7 Real-Time Notifications (Optional)   
+
+   - Subscribe to a WebSocket channel `anomalies.open` and append new alerts in real time, animating new rows with a highlight fade. 
+
+ 
+
+Use consistent Tailwind spacing/utilities, and ensure mobile responsiveness by collapsing the Actions column into a `<Button>` menu on narrow viewports.”   
+
+6. Analytics & Forecasting Charts 
+
+“In the Analytics tab, implement two coordinated chart views—Historical Traffic and 7-Day Forecast—using ShadCN components and our ChartContainer wrapper: 
+
+ 
+
+6.1 Layout & Tabs   
+
+   - At the top of the Analytics page, add a ShadCN `<Tabs>` with two tabs:   
+
+     • “Historical Traffic”   
+
+     • “7-Day Forecast”   
+
+   - Use `<TabsList>` for the tab headers and `<TabsContent>` for each view. 
+
+ 
+
+6.2 Historical Traffic View   
+
+   - On mount, call `GET /api/analytics/history?portId={selectedPort}&dateRange={from,to}`.   
+
+   - Above the chart, include:   
+
+     • A `<Select>` for Port (populated from `/api/ports`).   
+
+     • A `<DatePicker>` range selector defaulting to “Last 90 Days.”   
+
+     • A `<Button variant="outline" size="sm">Refresh</Button>` to re-fetch.   
+
+   - Display the data in a `<ChartContainer>` using a line chart:   
+
+     • X-axis: Date   
+
+     • Y-axis: Number of port calls   
+
+     • Tooltip: show date and count   
+
+   - Below the chart, render a ShadCN `<Card>` grid with summary stats:   
+
+     • “Avg. Daily Calls”   
+
+     • “Max Daily Calls”   
+
+     • “Total Calls in Range” 
+
+ 
+
+6.3 7-Day Forecast View   
+
+   - On tab switch (or on-demand), call `GET /api/agents/forecasting?portId={selectedPort}`.   
+
+   - Above the forecast chart, include the same Port `<Select>` but disable datepicker.   
+
+   - Display the forecast in a `<ChartContainer>` as an area chart:   
+
+     • X-axis: Next 7 calendar days   
+
+     • Y-axis: Predicted number of calls   
+
+     • Shaded confidence interval band around the line   
+
+   - If any predicted value exceeds that port’s capacity (from `/api/ports/{id}/capacity`), show a dismissible `<Banner variant="warning" title="Capacity Alert">` reading:   
+
+     “Forecasted calls exceed capacity on `<strong>{date}</strong>`. Please allocate additional resources.”   
+
+   - Add a `<Button variant="primary">Run Forecast Now</Button>` that triggers `POST /api/agents/forecasting/manual?portId={}` and re-loads the chart. 
+
+ 
+
+6.4 Responsive & Theming   
+
+   - Ensure both charts are fully responsive—use `useResizeObserver` to adjust dimensions.   
+
+   - Apply Tailwind classes consistent with ShadCN (e.g., `px-4 py-6 bg-background rounded-lg` on the chart cards).   
+
+   - Use default theme colors—no custom color overrides. 
+
+ 
+
+6.5 Error & Loading States   
+
+   - While data is loading, overlay a centered `<Spinner size="lg" />` inside the `<ChartContainer>`.   
+
+   - On fetch error, show a `<Alert variant="destructive">Failed to load data. <Button variant="link" onClick={refetch}>Retry</Button></Alert>`. 
+
+ 
+
+This will give users an interactive, real-time view of past performance and near-term forecasts, all built with ShadCN and our standard UI utilities.”   
+
+7. Prospects List 
+
+“In the `Sales` → `Prospects` tab, implement a fully featured lead-scoring interface using ShadCN components: 
+
+ 
+
+7.1 Data Fetching   
+
+   - On component mount, call `GET /api/sales/prospects` and store results in state.   
+
+   - Show a full-screen `<Spinner>` while loading, and an `<Alert variant="destructive">` on error. 
+
+ 
+
+7.2 Filters & Search   
+
+   - Above the table, add a `<div className="flex space-x-4">` containing:   
+
+     • `<Input type="search" placeholder="Search by IMO or Vessel Name" onChange={debouncedSearch} />`   
+
+     • `<Select placeholder="Filter by Port">` populated from `/api/reference/ports`   
+
+     • `<Slider min={0} max={1} step={0.01} defaultValue={[0.8,1]} onValueChange={onScoreFilter} />` for lead score range   
+
+     • `<DatePicker>` for ETA date-range 
+
+ 
+
+7.3 Prospects Table   
+
+   - Use `<Table>`, `<TableHeader>`, `<TableRow>`, `<TableCell>`:   
+
+     • Vessel (IMO) — clickable `<Link>` to mapping popup   
+
+     • Name — text   
+
+     • Port — text   
+
+     • ETA — formatted date via `date-fns`   
+
+     • Lead Score — `<Badge variant={score>0.85?'success':'secondary'}>`{score.toFixed(2)}   
+
+     • Similar To — name of matched client   
+
+     • Status — “open” or “contacted” badge   
+
+     • Actions — `<Button size="sm" variant="outline">Create Opportunity</Button>` 
+
+ 
+
+7.4 Pagination & Sorting   
+
+   - Enable client-side sorting on columns: ETA (ascending/descending), Lead Score   
+
+   - Add `<Button>` controls at bottom for “Previous” / “Next” pages, showing current page / total pages 
+
+ 
+
+7.5 Create Opportunity Dialog   
+
+   - When “Create Opportunity” clicked:   
+
+     • Open `<Dialog>` containing ShadCN `<Form>` with:   
+
+       - `Prospect` (read-only vesselName/IMO)   
+
+       - `<Input>` for Client Name (autocomplete from `/api/clients?search=`)   
+
+       - `<Select>` for Suggested Package (from `/api/catalog/packages`)   
+
+       - `<Input type="number">` for Estimated Value   
+
+       - `<Textarea>` for Notes   
+
+       - `<Button variant="primary">Save & Go to Pipeline</Button>`   
+
+     • On submit, `POST /api/sales/opportunities { imo, clientId, packageId, value, notes }`   
+
+     • Close dialog, show `<Toast>` “Opportunity created,” and remove row or update its status to “contacted” 
+
+ 
+
+7.6 Real-Time Updates   
+
+   - Subscribe to WebSocket or SSE on channel `prospects.updated` to refresh table when new prospects are scored or statuses change 
+
+ 
+
+7.7 Accessibility & Responsiveness   
+
+   - Ensure `<Table>` is scrollable on mobile, columns collapse under a “Details” expandable row   
+
+   - All buttons and inputs have `aria-label` attributes   
+
+   - Use Tailwind responsive classes (`md:table`, `sm:hidden`, etc.) 
+
+ 
+
+This prompt will scaffold the complete Sales Prospects feature—filters, table, actions, dialog, and real-time updates—using ShadCN UI and your backend APIs.”   
+
+8. Opportunities Kanban 
+
+“In `Sales` → `Opportunities` tab, build a full Kanban board using ShadCN components and react-beautiful-dnd: 
+
+ 
+
+8.1 Data Fetch & State   
+
+   - On mount, call `GET /api/sales/opportunities` → returns an array of `{ id, clientName, vesselIMO, vesselName, package, value, stage, updatedAt }`.   
+
+   - In React state, group items by their `stage` into an object: 
+
+     ```ts 
+
+     { 
+
+       Identified: Opportunity[], 
+
+       Proposal: Opportunity[], 
+
+       Negotiation: Opportunity[], 
+
+       Won: Opportunity[], 
+
+       Lost: Opportunity[] 
+
+     } 
+
+     ``` 
+
+ 
+
+8.2 Tab Layout   
+
+   - Use ShadCN `<Tabs>` with one `<TabsList>` item per stage (“Identified”, “Proposal Sent”, “Negotiation”, “Won”, “Lost”).   
+
+   - Each `<TabsContent>` renders a `<Droppable droppableId={stage}>` container. 
+
+ 
+
+8.3 Opportunity Cards   
+
+   - Inside each `Droppable`, map over its opportunities and render a `<Draggable draggableId={opp.id} index={i}>`.   
+
+   - Each draggable uses a ShadCN `<Card>` containing: 
+
+     - `<CardHeader>`: `<CardTitle>` = `{clientName} – {vesselName} ({vesselIMO})`   
+
+     - `<CardDescription>` = `{package} • $ {value.toLocaleString()}`   
+
+     - `<Badge>` for `stage` color-coded (e.g., blue for Identified, green for Won)   
+
+     - `<CardFooter>` with `<Text>` = `Updated {formatDistance(updatedAt, now)} ago` 
+
+ 
+
+8.4 Drag-and-Drop Behavior   
+
+   - Wrap everything in `<DragDropContext onDragEnd={handleDragEnd}>`.   
+
+   - In `handleDragEnd({ source, destination, draggableId })`: 
+
+     1. If no `destination` or same `stage`, return.   
+
+     2. Optimistically move item from `state[source.droppableId]` to `state[destination.droppableId]`; re-render.   
+
+     3. Call `PUT /api/sales/opportunities/${draggableId}/stage` with JSON `{ stage: destination.droppableId }`.   
+
+     4. On failure, revert state and show `<Toast>` error. 
+
+ 
+
+8.5 Create Opportunity Button   
+
+   - Above the tabs, add `<Button variant="primary">New Opportunity</Button>`   
+
+   - On click, open a `<Dialog>` with the Opportunity form (client, vessel, package, value, initial stage = “Identified”).   
+
+   - On submit, call `POST /api/sales/opportunities`, append the returned opp to `state.Identified`, show success `<Toast>`. 
+
+ 
+
+8.6 Loading & Empty States   
+
+   - While fetching, display a centered `<Spinner>` in each tab panel.   
+
+   - If a stage has zero items, show `<EmptyState>` with message “No opportunities in this stage” and an icon. 
+
+ 
+
+8.7 Responsive & Styling   
+
+   - Use a CSS grid or flex to display each `<Droppable>` column side by side on desktop, and stacked on mobile.   
+
+   - Ensure cards have a max-width and margin for readability.   
+
+   - Use Tailwind utility classes for spacing (e.g., `p-4`, `space-y-4`) and ShadCN variants for consistent theming. 
+
+ 
+
+This fully implements a drag-and-drop Kanban pipeline for Opportunities with ShadCN UI and connects to your backend APIs.”   
+
+9. Deals CRUD & Pipeline 
+
+“In `Sales` → `Deals` tab, implement a full CRUD interface with ShadCN components: 
+
+ 
+
+9.1 List View   
+
+   - Fetch deals via `GET /api/crm/deals`.   
+
+   - Render ShadCN `<Table>` with columns:   
+
+     • Deal ID   
+
+     • Client Name   
+
+     • Vessel (IMO)   
+
+     • Package   
+
+     • Value (formatted currency)   
+
+     • Stage (`<Badge>` color-coded per stage)   
+
+     • Created At (formatted date)   
+
+     • Actions:   
+
+        – Edit (`<Button size="icon" variant="ghost"><EditIcon/></Button>`)   
+
+        – Delete (`<Button size="icon" variant="destructive"><TrashIcon/></Button>`)   
+
+   - Add table features: sorting on Value and Created At, pagination (20 rows/page), row hover highlighting. 
+
+ 
+
+9.2 Create Deal   
+
+   - ‘New Deal’ `<Button variant="primary" icon={<PlusIcon/>}>New Deal</Button>` above the table.   
+
+   - Opens a ShadCN `<Dialog>` containing a `<Form>` with:   
+
+     • Client: `<ContactAutocomplete>` (search `/api/contacts`)   
+
+     • Vessel: `<Select>` populated from `/api/portcalls?clientId={selectedClient}`   
+
+     • Package: `<Select>` from `/api/catalog/packages`   
+
+     • Value: `<Input type="number" prefix="$" />`   
+
+     • Stage: `<Select>` options [Identified, Proposal Sent, Negotiation, Won, Lost]   
+
+     • Notes: `<Textarea />`   
+
+     • Buttons:   
+
+        – Save (`<Button variant="primary">Save Deal</Button>`) → POST to `/api/crm/deals`   
+
+        – Cancel (`<Button variant="outline">Cancel</Button>`) closes dialog   
+
+   - On success: close dialog, refresh list, toast “Deal created.” 
+
+ 
+
+9.3 Edit Deal   
+
+   - Edit icon in table opens the same `<Dialog>`, pre-filled via `GET /api/crm/deals/{dealId}`.   
+
+   - Fields identical to Create form.   
+
+   - Save button calls `PUT /api/crm/deals/{dealId}`.   
+
+   - On success: close dialog, refresh list, toast “Deal updated.” 
+
+ 
+
+9.4 Delete Deal   
+
+   - Delete icon opens a confirmation `<AlertDialog>`:   
+
+     • Title: “Delete Deal?”   
+
+     • Body: “This action cannot be undone.”   
+
+     • Buttons:   
+
+       – Confirm Delete (`<Button variant="destructive">Delete</Button>`) → `DELETE /api/crm/deals/{dealId}`   
+
+       – Cancel (`<Button variant="outline">Cancel</Button>`)   
+
+   - On confirm: delete, refresh list, toast “Deal deleted.” 
+
+ 
+
+9.5 Pipeline View Toggle   
+
+   - Above the table, add a toggle switch `<Switch>` labeled “Kanban View.”   
+
+   - When enabled, hide the table and mount the Opportunities Kanban component (reuse `/api/crm/deals` data, draggable cards to update stage via `PUT /api/crm/deals/{dealId}/stage`).   
+
+ 
+
+9.6 Detail Drawer   
+
+   - Clicking a table row opens a `<Drawer>` from the right with full deal details:   
+
+     • All fields from the form   
+
+     • Linked Tasks list (`GET /api/crm/deals/{dealId}/tasks`)   
+
+     • Contact info preview   
+
+     • Activity feed (`GET /api/audit/logs?entity=deal&entityId={dealId}`)   
+
+   - Within the drawer, include an “Add Note” `<Textarea>` + `<Button>` to `POST /api/crm/deals/{dealId}/notes`. 
+
+ 
+
+9.7 Access Control   
+
+   - Hide “New Deal” and Edit/Delete buttons if user role from `/api/users/me` does not include `role === 'Sales'` or `Admin`.   
+
+   - Show read-only table cells for unauthorized users. 
+
+10. Tasks & Reminders 
+
+“In `Sales` → `Tasks & Reminders`, build a full‐featured task management page using ShadCN: 
+
+ 
+
+10.1 Page Shell & Data Fetch   
+
+   - Create `TasksPage.tsx` under `src/pages/sales/`   
+
+   - Use a custom `useApi('/api/sales/tasks')` hook to fetch `{ tasks: Task[] }` on mount   
+
+   - Show `<Spinner>` while loading, and `<Alert variant="destructive">` on error   
+
+ 
+
+10.2 Toolbar with Filters & New Task   
+
+   - At top, a `<Flex>` bar containing:   
+
+     • ‘New Task’ `<Button variant="primary">` opens a `<Dialog>`   
+
+     • Status Filter: `<Select>` (“All”, “Pending”, “Completed”, “Overdue”) bound to filter state   
+
+     • Due Date Range: two `<DatePicker>`s for “From” / “To”   
+
+     • Search: `<Input type="search" placeholder="Search tasks…"/>`   
+
+ 
+
+10.3 Tasks Table   
+
+   - Use ShadCN `<Table>`, `<TableHeader>`, `<TableRow>`, `<TableCell>`   
+
+   - Columns:   
+
+     • Task Title (`task.title`)   
+
+     • Entity: link to `/sales/deals/{dealId}` or `/sales/prospects/{imo}` (`<Link>` inside cell)   
+
+     • Due Date: formatted via `dayjs(task.dueDate).format('DD.MM.YY')`   
+
+     • Status: `<Badge>` with color variants (`pending=blue` 
+
+ 
+
+11. Contact Enrichment & Directory 
+
+“In `Sales` → `Contacts` tab, implement a full-featured Contact Directory and Enrichment workflow using ShadCN components: 
+
+ 
+
+11.1 Search & List Contacts   
+
+   - At the top, add a `<Form>` with a `<FormField>` wrapping an `<Input type="search" placeholder="Search by name or email…">`.   
+
+   - Debounce input (300 ms) and query `GET /api/contacts?search={query}`.   
+
+   - Below, render a ShadCN `<Table>`:   
+
+     • Columns: Name, Email, Phone, Position, Company, Last Contacted, Actions   
+
+     • Use `<TableHeader>`, `<TableRow>`, `<TableCell>`, `<TableBody>` per ShadCN pattern   
+
+   - Show a `<Spinner>` in the table body while loading, and an `<Alert variant="info">No contacts found</Alert>` if empty. 
+
+ 
+
+11.2 View & Edit Contact Details   
+
+   - In the Actions column, add two buttons per row:   
+
+     • `<Button size="sm" variant="outline">View</Button>`   
+
+     • `<Button size="sm" variant="ghost">Edit</Button>`   
+
+   - View opens a `<Dialog>` showing all contact fields in a `<Card>`:   
+
+     - Name, Email, Phone, Position, Company, LinkedIn URL   
+
+     - Recent Deals (list pulled from `GET /api/crm/deals?contactId={id}`)   
+
+   - Edit opens a `<Dialog>` with a `<Form>` containing `<Input>`s for each field.   
+
+     - On submit, validate (e.g., email format) and call `PUT /api/contacts/{id}`, then refresh the table and show `<Toast>` “Contact updated”. 
+
+ 
+
+11.3 Add New Contact   
+
+   - Above the table, place a `<Button variant="primary">New Contact</Button>`.   
+
+   - Click opens a `<Dialog>` with a `<Form>`:   
+
+     • `<Input placeholder="Full name" name="name" required>`   
+
+     • `<Input placeholder="Email" name="email" type="email" required>`   
+
+     • `<Input placeholder="Phone" name="phone">`   
+
+     • `<Input placeholder="Position" name="position">`   
+
+     • `<Input placeholder="Company domain (for enrichment)" name="domain">`   
+
+   - Include a `<Button variant="secondary">Enrich via Hunter.io</Button>` inside the form.   
+
+     - On click, call `GET /api/integrations/hunter?domain={domain}` and auto‐populate the Email, Phone, Position fields with the response.   
+
+     - Show a `<Badge variant="secondary">Verified by Hunter</Badge>` next to each enriched field.   
+
+   - “Save” `<Button variant="primary">` calls `POST /api/contacts`, then closes dialog, refreshes table, and shows `<Toast>`. 
+
+ 
+
+11.4 Bulk Import & Export   
+
+   - Next to “New Contact,” add `<Button variant="outline">Import Contacts</Button>` and `<Button variant="outline">Export CSV</Button>`.   
+
+   - Import opens a `<Dialog>` with `<Input type="file" accept=".csv">`, uploads to `POST /api/contacts/import`, shows `<Progress>` bar, and toasts “Imported N contacts”.   
+
+   - Export triggers `GET /api/contacts/export` and downloads the CSV. 
+
+ 
+
+11.5 Table Enhancements   
+
+   - Enable column sorting by clicking `<TableHeader>` for Name, Email, Company.   
+
+   - Add pagination controls below the table using ShadCN `<Button>`s (“Previous”, “Next”) and display current page/total.   
+
+   - Highlight rows on hover with Tailwind: `hover:bg-gray-50`. 
+
+All dialog forms and tables should use ShadCN form validation, spacing, and responsive design practices.”   
+
+12. Campaign Planner & Execution 
+
+In the `Marketing` tab, implement a full campaign management interface with the following flow: 
+
+ 
+
+12.1 UI Layout 
+
+- Use ShadCN `<Tabs>` or `<Card>` layout titled “Campaign Planner” 
+
+- Include a form at the top of the view for campaign creation and configuration 
+
+ 
+
+12.2 Campaign Creation Form: 
+
+- `<Select>` for Campaign Type: [Product Promo, Reactivation, Event Invite] 
+
+- `<Input>` or `<Combobox>` for Target Product or Service (e.g., “Sludge Removal Bundle”) 
+
+- `<Select>` for Region or Port (fetch from `/api/ports/list`) 
+
+- `<Slider>` or numeric `<Input>` for minimum Lead Score threshold (e.g., > 0.75) 
+
+- `<Switch>` to auto-send or manually approve before sending 
+
+- `<Button variant="primary">Run Marketing Bot</Button>` triggers: 
+
+   → `POST /api/agents/marketing-bot` with form values 
+
+ 
+
+12.3 Display Campaign Results in Table: 
+
+- Fetch result from `GET /api/agents/marketing-bot?campaignId={latestId}` 
+
+- Render using ShadCN `<Table>` or `<DataTable>`: 
+
+   • Columns: Audience (Client Name or IMO), Lead Score, Suggested Message, Status (Draft, Approved, Sent) 
+
+   • Row actions:  
+
+     - `<Button variant="outline">Preview</Button>` → opens `<Dialog>` with full message 
+
+     - `<Button variant="default">Approve & Send</Button>` calls `PUT /api/agents/marketing-bot/{rowId}/send` 
+
+ 
+
+12.4 Confirmation Dialog: 
+
+- On Approve & Send, show `<Dialog>`: 
+
+   • Title: “Confirm Campaign Message” 
+
+   • Body: Render message body with target contact, vessel (if relevant), and CTA 
+
+   • `<Button variant="primary">Send Now</Button>` confirms action 
+
+ 
+
+12.5 Campaign History: 
+
+- Below current campaign view, render past campaigns: 
+
+   • Fetch from `/api/agents/marketing-bot/history` 
+
+   • Show `<Accordion>` or `<Table>` with columns: Campaign Name, Type, Date Run, Sent Count, Open Rate, Click Rate 
+
+   • Each entry has “Re-run” `<Button>` pre-filled with previous parameters 
+
+ 
+
+12.6 Success Feedback: 
+
+- After running the bot or sending a campaign: 
+
+   - Show `<Toast>`: “Campaign successfully launched to 34 contacts” 
+
+   - Reload the campaign result table to reflect updated statuses 
+
+ 
+
+13. Exports & Reporting 
+
+Build an "Exports" page under the `Analytics` tab using ShadCN UI. 
+
+ 
+
+13.1 Layout: 
+
+- Use `<Card>` layout for each export section 
+
+- Add a page title `<h2 className="text-2xl font-semibold mb-6">Data Exports</h2>` 
+
+ 
+
+13.2 Export Types: 
+
+1. Deals Export 
+
+   - `<Button variant="secondary">Export Deals (CSV)</Button>` 
+
+   - On click, trigger `GET /api/crm/deals/export` 
+
+   - Show `<Progress>` bar while export is generating 
+
+   - When ready, show download `<Link>`: `Download Deals Export` 
+
+ 
+
+2. Prospects Export 
+
+   - `<Button variant="secondary">Export Prospects (CSV)</Button>` 
+
+   - On click, call `GET /api/sales/prospects/export` 
+
+   - Show same progress/loading state 
+
+   - Include filters before export: Date Range, Lead Score Min/Max using `<DateRangePicker>` and `<Slider>` 
+
+ 
+
+3. Forecast Export 
+
+   - `<Button variant="secondary">Export Forecast (CSV)</Button>` 
+
+   - On click, call `GET /api/agents/forecasting/export` 
+
+   - Use `<Select>` to filter by Port before triggering the export 
+
+ 
+
+13.3 Backend API behavior: 
+
+- API should return a `downloadUrl` once export is ready 
+
+- Handle long-running tasks by polling `/api/exports/status/{exportId}` if needed 
+
+13.4 Acceptance: 
+
+- All three exports should show real-time progress 
+
+- Use `<Toast>` or `<Alert>` to show export success or error 
+
+- Show last export date as footnote (`<small className="text-muted-foreground">Last exported on …</small>`) 
+
+- `<ToggleGroup>` to choose export format: CSV, XLSX 
+
+- View export history: list of past exports with timestamps and status 
+ 
+
+14. Calendar View for Tasks 
+
+Create a Calendar view under the `Tasks` tab using FullCalendar and ShadCN components. 
+
+ 
+
+14.1 Layout: 
+
+- Add a nested route or tab `Tasks > Calendar` 
+
+- Use `FullCalendar` (React version) inside a responsive `<Card>` with padding and overflow scroll for full-screen view 
+
+- Header should include a `<Select>` to filter tasks by status (All, Pending, Completed) and a `<DatePicker>` for range 
+
+ 
+
+14.2 Calendar Configuration: 
+
+- Show tasks as calendar events (title = task title, date = dueDate) 
+
+- Fetch tasks from `GET /api/sales/tasks?status=&startDate=&endDate=` 
+
+- Each event should have: 
+
+   • title: task.title   
+
+   • start: task.dueDate   
+
+   • color:  
+
+     - Red for overdue (`dueDate < today && status !== completed`)   
+
+     - Green for completed   
+
+     - Yellow for upcoming   
+
+ 
+
+14.3 Interactions: 
+
+- Clicking an event opens a `<Dialog>` with full task details:   
+
+   • Title   
+
+   • Description   
+
+   • Related Entity (deal, vessel, etc.)   
+
+   • Assigned To   
+
+   • Status dropdown   
+
+   • Due Date editable via `<DatePicker>`   
+
+   • 'Mark as Complete' `<Button>` → `PUT /api/tasks/{id}/complete`   
+
+   • 'Reschedule' `<Button>` opens inline date editor or drag-to-reschedule 
+
+ 
+
+14.4 Drag-and-Drop: 
+
+- Enable FullCalendar’s editable mode 
+
+- When an event is dragged to a new date, send `PUT /api/tasks/{taskId}/reschedule` with new due date 
+
+- On success, show `<Toast>` “Task rescheduled to [newDate]” 
+
+ 
+
+14.5 Extras: 
+
+- Highlight today’s date with a vertical line 
+
+- Include optional “+ New Task” `<Button>` above calendar that opens a `<Dialog>` to add task 
+
+- Include a `<Legend>` under the calendar with color codes: Overdue, Upcoming, Completed 
+
+ 
+
+14.6 State Management: 
+
+- Use `useEffect` to refetch tasks when filter changes 
+
+- Debounce filter inputs for API efficiency 
+
+- Use `useToast()` to show status messages after complete/reschedule 
+
+ 
+
+14.7 Libraries: 
+
+- React FullCalendar (`@fullcalendar/react`, `@fullcalendar/daygrid`, `@fullcalendar/interaction`) 
+
+- Tailwind CSS via ShadCN for styling and layout 
+
+ 
+
+14.8 Goal: 
+
+Provide a visual, drag-and-drop task planner for Sales/Ops team with inline task editing and direct calendar-based controls. 
+
+ 
+
+15. Notifications Centre 
+ 
+
+Build a global Notifications system using ShadCN and React that works across the app to alert users about key events (e.g., new anomalies, upcoming tasks, assigned deals). 
+
+ 
+
+15.1 Components: 
+
+- A bell icon button in the top-right header bar with a notification count badge (unread count). 
+
+- On click, open a ShadCN `<DropdownMenu>` or `<Popover>` containing a scrollable `<List>` of the latest 20 notifications. 
+
+ 
+
+15.2 User Interactions: 
+
+- Clicking on the bell opens the dropdown. 
+
+- Each notification row includes: 
+
+   • Icon or emoji (based on notification type)   
+
+   • Message (e.g., “New hot lead: Ocean Pearl with ETA in 2 days”)   
+
+   • Timestamp (e.g., “2h ago”)   
+
+   • Status badge (`<Badge variant="outline">New</Badge>` if unread)   
+
+- Clicking on the notification should navigate to the related entity (e.g., Prospect, Task, Deal). 
+
+- Unread notifications are bold; read ones are normal weight. 
+
+ 
+
+15.3 Backend Interactions: 
+
+- On mount, call `GET /api/notifications?limit=20`   
+
+- When a notification is clicked, mark it as read via `PUT /api/notifications/{id}/read` 
+
+- Use polling every 60 seconds OR WebSocket (`notifications.new`) to auto-refresh count 
+
+ 
+
+15.4 Optional Filters 
+
+- Add a footer button: `<Button variant="ghost">View All</Button>`   
+
+- On click, redirect to `/notifications` page with full history and filter tabs: All, Unread, Read, Task-related, System 
+
+ 
+
+15.5 Types of Handle  
+
+- System alerts (e.g., anomaly detected)   
+
+- AI agent updates (forecast generated, suggestions ready)   
+
+- Task reminders (“Task ‘Follow-up on Shell deal’ is due today”)   
+
+- Assignment events (“You were assigned a new deal: Maersk Proposal”) 
+
+ 
+
+15.6 State Management  
+
+- Store unread count in a global context/store (e.g., Zustand or React Context) 
+
+- Update badge count when notifications are read 
+
+ 
+
+15.7 Acceptance Criteria  
+
+- Bell shows unread count badge 
+
+- Dropdown loads latest 20 notifications 
+
+- Read/unread visual difference 
+
+- Click triggers mark-as-read + navigation 
+
+- Background refresh works every 60s or on WebSocket push 
+
+ 
+
+15.8 Tech Used: 
+
+- ShadCN: `<DropdownMenu>`, `<List>`, `<Button>`, `<Badge>`, `<Skeleton>` (for loading state) 
+
+- API endpoints:  
+
+   • `GET /api/notifications`   
+
+   • `PUT /api/notifications/{id}/read`   
+
+   • `GET /api/notifications?filter=unread` 
+
+16. Settings: User Roles & Audit Logs 
+
+16.1. Team & Role Management 
+
+In the `Settings → Team` page: 
+
+- Fetch all users via `GET /api/users` 
+
+- Display a `<Table>` with columns: 
+
+  • Name   
+
+  • Email   
+
+  • Role (`Admin`, `Sales`, `Ops`, `Marketing`, `Read-only`)   
+
+  • Status (`Active`, `Deactivated`)   
+
+  • Actions (Edit, Deactivate) 
+
+ 
+
+- At the top, add an `<Button variant="primary">Invite User</Button>`: 
+
+  • Opens a `<Dialog>` form with: 
+
+    - `<Input>` for Email 
+
+    - `<Select>` for Role 
+
+    - `<Button>`: “Send Invite” 
+
+ 
+
+- On submit:   
+
+  `POST /api/users/invite` with payload `{ email, role }` 
+
+ 
+
+- For each row in the table: 
+
+  • Edit action opens inline `<Dialog>` with current role pre-selected → `PUT /api/users/{userId}/role` 
+
+  • Deactivate button → confirmation modal → `PUT /api/users/{userId}/deactivate` 
+
+  • Deactivated users appear greyed out or with `opacity-50` 
+
+- Use ShadCN components: `<Table>`, `<Dialog>`, `<Select>`, `<Badge>`, `<Button>`, `<AlertDialog>` 
+
+16.2. Role-Based Access Display (RBAC UI Control) 
+
+ 
+Globally implement frontend RBAC using a `useUser()` hook: 
+
+- Return `user.role` from session 
+
+- Define access control rules per tab or feature: 
+
+  Example: 
+
+  - Admins → full access 
+
+  - Sales → access only to Sales, Contacts, Deals 
+
+  - Ops → access to Mapping, Alerts, Forecasting 
+
+  - Marketing → access to Marketing, Campaigns 
+
+  - Read-only → can view but not edit any section 
+
+ 
+
+- Use these conditions to: 
+
+  - Conditionally render tabs in navigation 
+
+  - Disable/hide buttons for restricted actions 
+
+  - Show `<Alert>` if access is denied 
+
+ 
+
+Wrap each tab’s layout in: 
+
+  ```tsx 
+
+  if (user.role !== 'Admin' && user.role !== 'Marketing') { 
+
+    return <Alert title="Access Denied" description="You do not have access to this section." /> 
+
+  } 
+ 
+
+16.3. Audit Logs Page 
+
+In the Settings → Audit Logs page: 
+
+Fetch logs from GET /api/audit/logs 
+
+Display a <Table> with columns: 
+• Timestamp 
+• User Name (resolved from userId) 
+• Action Type (e.g., Created Deal, Updated Client, Deleted Prospect) 
+• Entity Affected (Deal ID, Client, etc.) 
+• Context / Metadata (as JSON string or tooltip) 
+
+Add top filter controls: 
+• <Select> for Action Type (Create, Update, Delete, Login, Upload) 
+• <DateRangePicker> for filtering by time 
+• <Input type="search"> for user email or entity 
+
+Add an <Button variant="secondary">Export CSV</Button> that triggers: 
+GET /api/audit/logs/export?filters=... 
+
+For long logs, enable pagination or infinite scroll with page query param 
+
+Use: <Table>, <Select>, <DatePicker>, <Button>, <Pagination> or scroll observer 
+
+ 
