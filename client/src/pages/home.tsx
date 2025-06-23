@@ -98,6 +98,8 @@ export default function Home() {
               fileId={processedFile?.id || null}
               currentSheet={currentSheet}
               initialInsights={processedFile?.aiAnalysis || null}
+              currentData={currentData}
+              filename={processedFile?.filename}
             />
           </div>
 
