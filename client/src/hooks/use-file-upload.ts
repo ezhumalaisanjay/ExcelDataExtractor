@@ -1,5 +1,5 @@
-
 import { useState, useCallback } from "react";
+import { apiRequest } from "@/lib/queryClient";
 
 interface UseFileUploadOptions {
   onSuccess?: (data: any) => void;
@@ -26,20 +26,36 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     }, 200);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Convert file to base64 for Netlify Functions
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]); // Remove data:... prefix
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(file);
+      const base64Data = await base64Promise;
 
-      const response = await fetch('/api/files/upload', {
+      const response = await fetch('/.netlify/functions/upload', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileData: base64Data,
+          fileName: file.name,
+          fileSize: file.size
+        }),
       });
 
       clearInterval(progressInterval);
       setProgress(100);
 
       if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(errorData || 'Upload failed');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Upload failed');
       }
 
       const data = await response.json();
