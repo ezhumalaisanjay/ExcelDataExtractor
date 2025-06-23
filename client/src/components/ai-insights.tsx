@@ -16,11 +16,9 @@ interface AIInsightsProps {
   fileId: number | null;
   currentSheet: string;
   initialInsights?: AIInsights | null;
-  currentData?: any[][] | null;
-  filename?: string;
 }
 
-export function AIInsights({ fileId, currentSheet, initialInsights, currentData, filename }: AIInsightsProps) {
+export function AIInsights({ fileId, currentSheet, initialInsights }: AIInsightsProps) {
   const [insights, setInsights] = useState<AIInsights | null>(initialInsights || null);
   const [detailedAnalysis, setDetailedAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -32,17 +30,13 @@ export function AIInsights({ fileId, currentSheet, initialInsights, currentData,
 
     setIsAnalyzing(true);
     try {
-      // For Netlify, we need to pass the data directly since we don't have persistent storage
-      const response = await fetch('/.netlify/functions/analyze', {
+      const response = await fetch(`/api/files/${fileId}/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          sheetName: currentSheet,
-          data: currentData,
-          filename: filename
-        }),
+        body: JSON.stringify({ sheetName: currentSheet }),
+        credentials: 'include',
       });
 
       if (!response.ok) {

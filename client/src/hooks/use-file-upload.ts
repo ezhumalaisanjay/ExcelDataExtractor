@@ -26,28 +26,13 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     }, 200);
 
     try {
-      // Convert file to base64 for Netlify Functions
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]); // Remove data:... prefix
-        };
-        reader.onerror = reject;
-      });
-      reader.readAsDataURL(file);
-      const base64Data = await base64Promise;
+      const formData = new FormData();
+      formData.append('file', file);
 
-      const response = await fetch('/.netlify/functions/upload', {
+      const response = await fetch('/api/files/upload', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileData: base64Data,
-          fileName: file.name,
-          fileSize: file.size
-        }),
+        body: formData,
+        credentials: 'include',
       });
 
       clearInterval(progressInterval);
