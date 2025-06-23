@@ -48,6 +48,9 @@ export class MemStorage implements IStorage {
       id,
       uploadedAt: new Date(),
       processedAt: null,
+      data: null,
+      status: insertFile.status || "pending",
+      errorMessage: insertFile.errorMessage || null,
     };
     this.files.set(id, file);
     return file;

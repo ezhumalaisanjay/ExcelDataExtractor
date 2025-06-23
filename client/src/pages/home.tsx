@@ -24,6 +24,10 @@ export default function Home() {
     }
   };
 
+  const handleSheetChange = (sheet: string) => {
+    setCurrentSheet(sheet);
+  };
+
   const handleClear = () => {
     setProcessedFile(null);
     setCurrentSheet("");
@@ -87,7 +91,7 @@ export default function Home() {
               data={currentData}
               sheets={processedFile?.sheets || []}
               currentSheet={currentSheet}
-              onSheetChange={setCurrentSheet}
+              onSheetChange={handleSheetChange}
               totalRows={currentData ? currentData.length - 1 : 0}
               totalColumns={currentData && currentData.length > 0 ? currentData[0].length : 0}
             />

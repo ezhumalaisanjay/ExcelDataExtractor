@@ -17,7 +17,7 @@ export const uploadedFiles = pgTable("uploaded_files", {
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   processedAt: timestamp("processed_at"),
   status: text("status").notNull().default("pending"), // pending, processing, completed, failed
-  data: jsonb("data"), // Extracted Excel data
+  data: jsonb("data").default(null), // Extracted Excel data
   errorMessage: text("error_message"),
 });
 
